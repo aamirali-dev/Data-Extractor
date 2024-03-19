@@ -4,9 +4,10 @@ from reportlab.pdfgen import canvas
 from PIL import Image
 import PyPDF2
 
-PNGS_NOT_FOUND = []
-
 class PdfPage:
+
+    PNGS_NOT_FOUND = []
+
     def __init__(self, data, label, custom, image_folder, image_output_folder):
         self.data = data
         self.label = label
@@ -55,13 +56,14 @@ class PdfPage:
             os.makedirs(targe_image_folder, exist_ok=True)
             image.save(target_image_path)
         except:
-            PNGS_NOT_FOUND.append(image_path)
+            self.PNGS_NOT_FOUND.append(image_path)
     
     def draw_order_details(self):
         y = 500
         index = 0
         
         def increment_index(i=1):
+            nonlocal index
             index += i
         
         self.canvas.setFont("Helvetica-Bold", 25)
