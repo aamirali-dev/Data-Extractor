@@ -52,7 +52,10 @@ class PdfPage:
         try:
             image = Image.open(image_path)
             img = image.resize((55, 55), Image.LANCZOS)
-            self.canvas.drawInlineImage(img, 520, y - (i*60) - 20)
+            background_color = (192, 192, 192)  # Grey color
+            background = Image.new('RGB', img.size, background_color)
+            background.paste(img, (0, 0), img)
+            self.canvas.drawInlineImage(background, 520, y - (i*60) - 20)
             os.makedirs(targe_image_folder, exist_ok=True)
             image.save(target_image_path)
         except:
@@ -89,7 +92,7 @@ class PdfPage:
         letter_width, letter_height = letter
         width, height, x, y = 100 * 2.83465, 150 * 2.83465, letter_width - (115 * 2.83465), (10 * 2.83465)
         self.canvas.drawInlineImage(self.label, x, y, width=width, height=height)
-        width, height, x, y = 80 * 2.83465, 80 * 2.83465, letter_width - (197 * 2.83465), (7.5 * 2.83465)
+        width, height, x, y = 80 * 2.83465, 80 * 2.83465, letter_width - (205 * 2.83465), (7.5 * 2.83465)
         self.canvas.drawInlineImage(self.custom, x, y, width=width, height=height) 
 
     def get(self):

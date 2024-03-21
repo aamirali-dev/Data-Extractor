@@ -18,7 +18,8 @@ class PageExtractor:
         'SKU': r'SKU:\s+(.*?)\n',
         'Quantity': r'Colour: .+?(\d+) x ',
         'Design Code': r'\s+-\s+(\d+)\s+SKU:',
-        'Title': r'items?\s+(.*?)\s+SKU:'
+        'Title': r'(?:items?\s+|Colour:[^\n]*\n)(.*?)\s+SKU:'
+        # 'Title': r'items?\s+(.*?)\s+SKU:'
     }
     
     config = {'moc': 0}
@@ -52,7 +53,8 @@ class PageExtractor:
             self.config['moc'] += 1
         
         items_info = {key: re.findall(expression, page_text, re.DOTALL) for key, expression in self.item_keys_to_expressions.items()}
-            
+        print(items_info)
+        print(page_text)
         items = [{key: items_info[key][i] for key in items_info} for i in range(self.count)]
         
         for i, item in enumerate(items):
@@ -74,8 +76,10 @@ class PageExtractor:
         
         if len(items) > 1:
             self.info['Design Folder'] = '4. Multi Orders'
+            self.info['Sort Key'] = items[0]['Rename'][:4]
         elif len(items) == 1:
-            self.info['Design Folder'] = self.SKU_DETAILS[items[0]['SKU']]['Design Folder'] 
+            self.info['Design Folder'] = self.SKU_DETAILS[items[0]['SKU']]['Design Folder']
+            self.info['Sort Key'] = items[0]['Rename']
 
     def get_info(self):
         return self.info
@@ -98,6 +102,7 @@ class PdfExtractor:
         self.images_not_found = []
 
         self.process_files()
+        self.sort_files()
 
     def add_to_pick_list(self, page):
         for item in page['items']:
@@ -118,10 +123,16 @@ class PdfExtractor:
             new_pdf_page = PdfPage(page_info, post, self.custom, self.image_folder, self.target_image_folder).get()
             self.add_to_pick_list(page_info)
             self.writer.add_page(new_pdf_page.pages[0])
-            self.info.append(new_pdf_page)
+            self.info.append({'data': page_info, 'page': new_pdf_page.pages[0], 'Sort Key': page_info['Sort Key']})
     
+    def sort_files(self):
+        self.info = sorted(self.info, key=lambda page: page['Sort Key'])
+
     def write(self, f):
-        self.writer.write(f)
+        writer = PyPDF2.PdfWriter()
+        for entry in self.info:
+            writer.add_page(entry['page'])
+        writer.write(f)
     
     def get_image_not_found(self):
         return PdfPage.PNGS_NOT_FOUND
