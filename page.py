@@ -9,6 +9,16 @@ class PdfPage:
     PNGS_NOT_FOUND = []
 
     def __init__(self, data, label, custom, image_folder, image_output_folder):
+        """
+        Initialize the PDF page object.
+
+        Args:
+            data (dict): The data to be used for generating the PDF.
+            label (Image): The postage label image.
+            custom (Image): The custom label image.
+            image_folder (str): The folder containing the product images.
+            image_output_folder (str): The folder where the images will be saved for printing.
+        """
         self.data = data
         self.label = label
         self.custom = custom
@@ -17,9 +27,13 @@ class PdfPage:
         self.init_canvas()
         self.draw_items()
         self.draw_order_details()
-        self.draw_labels()
+        # self.draw_labels()
     
     def init_canvas(self):
+        """
+        Initialize the canvas for pdf generation as we are gonna draw everyting 
+        manually and aren't gonna use any flowable or pdf template.
+        """
         self.packet = io.BytesIO()
         width, height = letter
         width = 210 * 2.83465
@@ -27,6 +41,9 @@ class PdfPage:
         self.canvas = canvas.Canvas(self.packet, pagesize=(width, height))
         
     def draw_items(self):
+        """
+        Draws each item from the order on the canvas. drawing item means drawing QTY x Size, Colour, Type, & Design code. Thumbnail is also included.
+        """
         y = 800
         for i, item in enumerate(self.data['items']):
             # Draw each piece of text separately
@@ -46,6 +63,12 @@ class PdfPage:
             self.draw_thumbnail(item, y, i)
             
     def draw_thumbnail(self, item, y, i):
+        """
+        It performs 3 tasks
+        1. copy thumnail image to the target location & rename it for sorting.
+        2. it sets the background color to grey
+        3. finally, it draws the thumbnail image on canvas
+        """
         image_path = self.image_folder + f"/{item['Design Code']}.png"
         targe_image_folder = self.image_output_folder + f"/{item['Design Folder']}"
         target_image_path = self.image_output_folder + f"/{item['Design Folder']}/{item['Rename']}.png"
@@ -59,6 +82,9 @@ class PdfPage:
             self.PNGS_NOT_FOUND.append(image_path)
     
     def draw_order_details(self):
+        """
+        Adds order details such as total amount, store, address to send this order to, including few dates.
+        """
         y = 500
         index = 0
         
@@ -86,6 +112,9 @@ class PdfPage:
         self.canvas.drawString(30, y - (index * 15), self.data['shop_name']) 
 
     def draw_labels(self):
+        """
+        Draws both postage & custom labels.
+        """
         letter_width, letter_height = letter
         width, height, x, y = 100 * 2.83465, 150 * 2.83465, letter_width - (115 * 2.83465), (10 * 2.83465)
         self.canvas.drawInlineImage(self.label, x, y, width=width, height=height)
@@ -93,11 +122,20 @@ class PdfPage:
         self.canvas.drawInlineImage(self.custom, x, y, width=width, height=height) 
 
     def get(self):
+        """
+        creates the pdf from the canvas and returns
+        
+        Returns:
+            PdfReader
+        """
         self.canvas.save()
         self.packet.seek(0)
         return PyPDF2.PdfReader(self.packet)
 
     def create_title(self, title, max_characters=40):
+        """
+        It splits the title at newline and returns the title as a list of 2 objects. if the title is small enough, second object is None.
+        """
         title = title.replace('\n', ' ')
         if len(title) > max_characters:
             start = max_characters
