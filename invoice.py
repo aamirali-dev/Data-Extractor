@@ -1,21 +1,12 @@
 
-import PyPDF2
-import re
-import pandas as pd 
-import csv
+import pandas as pd
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-import io, os 
-from pdf2image import convert_from_path
-from reportlab.platypus import Table, TableStyle, BaseDocTemplate, Frame, PageTemplate
+from reportlab.platypus import Table
 from reportlab.lib import colors
-from PIL import Image
-import threading
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, Spacer
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
 from datetime import date, timedelta
 
 def read_csv(filename):
