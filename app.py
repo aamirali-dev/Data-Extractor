@@ -32,8 +32,8 @@ class SwanSeaPrintingApp:
     # this is the dummy information for the testing purposes only 
     paths = {
         'SKU FILE': r"data/SKU LIST 2024.csv",
-        'PACK FILE': r"samples/29.2.24 - 8 Orders Pack 10001.pdf",
-        'POST FILE': r"samples/29.2.24 - 8 Orders Post 10001.pdf",
+        'PACK FILE': r"samples/29.2.24 - 24 Orders Pack 10001.pdf",
+        'POST FILE': r"samples/29.2.24 - 24 Orders Post 10001.pdf",
         'IMAGE FOLDER': r"samples/PNG",
         'OUTPUT IMAGE FOLDER': r"samples/hbl",
         'OUTPUT FOLDER': r"samples/output",
@@ -180,7 +180,7 @@ class SwanSeaPrintingApp:
         try:
             self.progress_bar['value'] = 10
             if not self.check_paths():
-                progress_bar['value'] = 100
+                self.progress_bar['value'] = 100
                 return
             
             os.makedirs(paths['OUTPUT FOLDER'], exist_ok=True)

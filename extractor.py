@@ -23,7 +23,8 @@ class PageExtractor:
         'SKU': r'SKU:\s+(.*?)\n',
         'Quantity': r'Colour: .+?(\d+) x ',
         'Design Code': r'\s+-\s+(\d+)\s+SKU:',
-        'Title': r'items?\s+(.*?)\s+SKU:'
+        'Title': r'(?:items?\s+|Colour:[^\n]*\n)(.*?)\s+SKU:'
+        # 'Title': r'items?\s+(.*?)\s+SKU:'
     }
     
     # this is used to set and pass the number of of multi-item orders across different pages. moc stands for multiple order count.
@@ -100,8 +101,10 @@ class PageExtractor:
         
         if len(items) > 1:
             self.info['Design Folder'] = '4. Multi Orders'
+            self.info['Sort Key'] = items[0]['Rename'][:4]
         elif len(items) == 1:
-            self.info['Design Folder'] = self.SKU_DETAILS[items[0]['SKU']]['Design Folder'] 
+            self.info['Design Folder'] = self.SKU_DETAILS[items[0]['SKU']]['Design Folder']
+            self.info['Sort Key'] = items[0]['Rename']
 
     def get_info(self):
         return self.info
@@ -141,6 +144,7 @@ class PdfExtractor:
         self.images_not_found = []
 
         self.process_files()
+        self.sort_files()
 
     def add_to_pick_list(self, page):
         """
@@ -177,13 +181,16 @@ class PdfExtractor:
             new_pdf_page = PdfPage(page_info, post, self.custom, self.image_folder, self.target_image_folder).get()
             self.add_to_pick_list(page_info)
             self.writer.add_page(new_pdf_page.pages[0])
-            self.info.append(new_pdf_page)
+            self.info.append({'data': page_info, 'page': new_pdf_page.pages[0], 'Sort Key': page_info['Sort Key']})
     
-    def write(self, filename):
-        """
-        Writes the resulting pdf file to the given location.
-        """
-        self.writer.write(filename)
+    def sort_files(self):
+        self.info = sorted(self.info, key=lambda page: page['Sort Key'])
+
+    def write(self, f):
+        writer = PyPDF2.PdfWriter()
+        for entry in self.info:
+            writer.add_page(entry['page'])
+        writer.write(f)
     
     def get_image_not_found(self):
         """
