@@ -184,13 +184,25 @@ class PdfExtractor:
             self.info.append({'data': page_info, 'page': new_pdf_page.pages[0], 'Sort Key': page_info['Sort Key']})
     
     def sort_files(self):
+        """
+        Sort files using the Sort Key
+        """
         self.info = sorted(self.info, key=lambda page: page['Sort Key'])
 
-    def write(self, f):
+    def write(self, filename):
+        """
+        Writes the PDF file to the specified filename.
+
+        Args:
+            filename (str): The name of the file to write to.
+
+        Returns:
+            None
+        """
         writer = PyPDF2.PdfWriter()
         for entry in self.info:
             writer.add_page(entry['page'])
-        writer.write(f)
+        writer.write(filename)
     
     def get_image_not_found(self):
         """
