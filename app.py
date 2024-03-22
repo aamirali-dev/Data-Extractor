@@ -16,7 +16,10 @@ from pick_list import PickList
 
 
 class SwanSeaPrintingApp:
-
+    """
+    This is the main UI class for this application.
+    """
+    # this is the dict to store the relevant paths selected by the user
     # paths = {
     #     'SKU FILE': None,
     #     'PACK FILE': None,
@@ -26,6 +29,7 @@ class SwanSeaPrintingApp:
     #     'OUTPUT FOLDER': None,
     # }
 
+    # this is the dummy information for the testing purposes only 
     paths = {
         'SKU FILE': r"data/SKU LIST 2024.csv",
         'PACK FILE': r"samples/29.2.24 - 24 Orders Pack 10001.pdf",
@@ -35,6 +39,7 @@ class SwanSeaPrintingApp:
         'OUTPUT FOLDER': r"samples/output",
     }
 
+    # this contains tkinter input objects
     entries = {
         'SKU FILE': None,
         'PACK FILE': None,
@@ -44,18 +49,29 @@ class SwanSeaPrintingApp:
         'OUTPUT FOLDER': None,
     }
 
+    # below lines segregates paths into files and folders for tkinter selection
     files = ['SKU FILE', 'PACK FILE', 'POST FILE']
     folders = ['IMAGE FOLDER', 'OUTPUT IMAGE FOLDER', 'OUTPUT FOLDER']
 
     def __init__(self, root):
+        """
+        It initializes the UI and draws necessary widgets
+        Args:
+            root (tk.Tk): parent object
+        """
         self.root = root
         root.title("Data Extraction and Processing")
         self.entries = {}
+        
+        # draw input widgets for files and folders
         self.draw_widgets(self.files)
         self.draw_widgets(self.folders, j=len(self.files), entry_type='folder')
 
+        # draw button to generate results
         button = tk.Button(root, text="Generate Results", command=self.handle_click)
         button.grid(row=len(self.paths) + 1, column=0, columnspan=3, pady=10)
+        
+        # finally generate a progress bar to show progress as it could take plenty of time to process files.
         progress_bar = ttk.Progressbar(root, orient='horizontal', length=300, mode='determinate')
         progress_bar.grid(row=len(self.paths) + 2, column=0, columnspan=3, pady=10)
         progress_bar['value'] = 100
@@ -64,6 +80,13 @@ class SwanSeaPrintingApp:
         self.worker_thread = None
 
     def draw_widgets(self, keys, j=0, entry_type='file'):
+        """
+        It draws input widgets that include a text entry and the browse button
+        Args:
+            keys (list): list of keys to be drawn
+            j (int): the starting index to draw on UI
+            entry_type (str): 'file' or 'folder'
+        """
         for i, key in enumerate(keys):
             label = tk.Label(self.root, text=key)
             label.grid(row=i+j, column=0, padx=10, pady=5, sticky="w")
@@ -77,6 +100,10 @@ class SwanSeaPrintingApp:
             self.entries[key] = entry
 
     def handle_click(self):
+        """
+        It creates a new worker if the initial worker is either done processing or 
+        no worker is processing yet. it is inplace to handle multi-click mistakes
+        """
         if self.worker_thread and self.worker_thread.is_alive():
             messagebox.showerror('Task In Progress', 'Another task is already running')
             return
@@ -85,6 +112,9 @@ class SwanSeaPrintingApp:
 
 
     def check_paths(self):
+        """
+        It checks if all the paths has been provided by the user or not 
+        """
         for key, value in self.paths.items():
             if not value:
                 messagebox.showerror("Path Not Selected", f"{key} is not selected. please select all paths to proceed")
@@ -92,6 +122,13 @@ class SwanSeaPrintingApp:
         return True
     
     def browse_file(self, index, entry_type='file'):
+        """
+        it uses tkinter browse file dialog. we created seperate functions because 
+        we are gonna select multiple files along the way
+        Args:
+            index (str): this is the name of the path 
+            entry_type (str): 'file' or 'folder'
+        """
         entries = self.entries
         if entry_type == 'file':
             file_path = filedialog.askopenfilename() 
@@ -105,6 +142,12 @@ class SwanSeaPrintingApp:
             entries[index].config(state='readonly')
     
     def filter_labels(self, labels, labels_path):
+        """
+        Labels pdf can contain both postage and custom labels and this function removes custom labels
+        Args:
+            labels ([Image]): list to be filtered
+            labels_path (str): path to the labels pdf
+        """
         reader = PyPDF2.PdfReader(labels_path)
         filtered_labels = []
         for i, page in enumerate(reader.pages):
@@ -115,6 +158,9 @@ class SwanSeaPrintingApp:
         return filtered_labels
     
     def get_sku_details(self):
+        """
+        read sku details from the csv file and return the details 
+        """
         sku_details = {}
 
         with open(self.paths['SKU FILE'], 'r') as file:
@@ -127,6 +173,9 @@ class SwanSeaPrintingApp:
         return sku_details
 
     def generate_results(self):
+        """
+        this is the main function that controls the processing of the results
+        """
         paths = self.paths
         try:
             self.progress_bar['value'] = 10
