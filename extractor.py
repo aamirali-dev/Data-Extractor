@@ -1,7 +1,6 @@
 import re 
 import PyPDF2
 from PIL import Image
-
 from page import PdfPage
 
 class PageExtractor:
@@ -76,7 +75,7 @@ class PageExtractor:
         
         if len(items) > 1:
             self.info['Design Folder'] = '4. Multi Orders'
-            self.info['Sort Key'] = items[0]['Rename'][:4]
+            self.info['Sort Key'] = items[0]['Rename']
         elif len(items) == 1:
             self.info['Design Folder'] = self.SKU_DETAILS[items[0]['SKU']]['Design Folder']
             self.info['Sort Key'] = items[0]['Rename']
@@ -106,7 +105,14 @@ class PdfExtractor:
 
     def add_to_pick_list(self, page):
         for item in page['items']:
-            self.garment_pick_list.append({'name': item['Garment Type'], 'size': item['Size'], 'color': item['Colour'], 'quantity': int(item['Quantity']), 'SKU TYPE': item['SKU'].split('-')[1]})
+            self.garment_pick_list.append({
+                'name': item['Garment Type'], 
+                'size': item['Size'], 
+                'color': item['Colour'], 
+                'quantity': int(item['Quantity']), 
+                'SKU TYPE': item['SKU'].split('-')[1],
+                'Sort Key': item['Rename']
+                })
  
 
 

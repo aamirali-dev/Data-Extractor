@@ -92,7 +92,7 @@ class PdfPage:
         letter_width, letter_height = letter
         width, height, x, y = 100 * 2.83465, 150 * 2.83465, letter_width - (115 * 2.83465), (10 * 2.83465)
         self.canvas.drawInlineImage(self.label, x, y, width=width, height=height)
-        width, height, x, y = 80 * 2.83465, 80 * 2.83465, letter_width - (205 * 2.83465), (7.5 * 2.83465)
+        width, height, x, y = 80 * 2.83465, 80 * 2.83465, letter_width - (200 * 2.83465), (7.5 * 2.83465)
         self.canvas.drawInlineImage(self.custom, x, y, width=width, height=height) 
 
     def get(self):

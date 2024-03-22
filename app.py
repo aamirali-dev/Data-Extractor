@@ -150,7 +150,9 @@ class SwanSeaPrintingApp:
                 writer.write(f)
             
             df = pd.DataFrame(writer.garment_pick_list)
-            grouped_df = df.groupby(['name', 'size', 'color'])['quantity'].sum().reset_index().sort_values(by=['name', 'size', 'color'])
+            # grouped_df = df.groupby(['name', 'size', 'color'])['quantity'].sum().reset_index().sort_values(by=['name', 'size', 'color'])
+            grouped_df = df.groupby(['name', 'size', 'color']).agg({'quantity': 'sum', 'Sort Key': 'first'}).reset_index()
+            grouped_df = grouped_df.sort_values(by=['Sort Key']).drop(columns=['Sort Key'])
             PickList(grouped_df).to_pdf(paths['OUTPUT FOLDER'] + '/pick_list.pdf')
             
             grouped_df = df.groupby(['SKU TYPE'])['quantity'].sum().reset_index()
