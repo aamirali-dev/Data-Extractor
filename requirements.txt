@@ -1,0 +1,8 @@
+pypdf2
+pandas
+pdf2image
+pillow 
+pytesseract
+reportlab 
+qrcode[pill]
+auto-py-to-exe

@@ -2,6 +2,9 @@ import re
 import PyPDF2
 from PIL import Image
 from page import PdfPage
+import PyPDF2
+import os
+from fuzzywuzzy import fuzz
 
 class PageExtractor:
     """
@@ -28,19 +31,23 @@ class PageExtractor:
     
     # this is used to set and pass the number of of multi-item orders across different pages. moc stands for multiple order count.
     config = {'moc': 0}
+    png_name_counts = {}
     
-    def __init__(self, page_text, SKU_DETAILS):
+    def __init__(self, file, page_no, page_text, sku_details):
         """
         Args:
             page_text (str): The text of the page to extract information from.
             SKU_DETAILS (dict): A dictionary of SKU information, including any additional information needed to process the page.
         """
+        self.filename = file
+        self.page_no = page_no
         self.page_text = page_text
         # SKU_DETAILS is just some business specific details and doesn't concern the program logic much neither requires understanding of the details
-        self.SKU_DETAILS = SKU_DETAILS
+        self.sku_details = sku_details
         self.info = {}
         self.items = []
         self.count = 0
+        self.items_not_found = []
         self.extract_metadata()
         self.extract_items()
         self.assign_design_folder()
@@ -54,8 +61,10 @@ class PageExtractor:
             match = re.search(regex, self.page_text, re.DOTALL)
             if match:
                 self.info[key] = match.group(1).strip()
-
-        self.count = int(self.info['no_of_items'])
+        try:
+            self.info['name'] = self.info['address'].split('\n')[0].strip()
+        except:
+            raise Exception(f'Unable to find name on page: {self.page_no}, file: {self.filename}')
 
     def extract_items(self):
         """
@@ -63,32 +72,55 @@ class PageExtractor:
         """    
         page_text = self.page_text
         info = self.info
-        SKU_DETAILS = self.SKU_DETAILS
-        
-        # if order is multi-item, update moc 
-        if self.count > 1:
-            self.config['moc'] += 1
+        sku_details = self.sku_details
         
         # find matches for all the keys in item_keys_to_expressions
         items_info = {key: re.findall(expression, page_text, re.DOTALL) for key, expression in self.item_keys_to_expressions.items()}
         
         # since we have a dict of lists, we transform it to a list of dicts
-        items = [{key: items_info[key][i] for key in items_info} for i in range(self.count)]
-        
+        try:
+            items = [{key: items_info[key][i] for key in items_info} for i in range(len(items_info['SKU']))]
+        except:
+            raise Exception(f'Unable to parse page: {self.page_no}, file: {self.filename}')
+        items_not_found = self.items_not_found
+        items_not_found_index = []
+
+        # if order is multi-item, update moc 
+        self.count = len(items)
+        if int(self.info['no_of_items']) > 1:
+            self.config['moc'] += 1
+
         for i, item in enumerate(items):
             # shorten the title by excluding some details
             item['Title'] = item['Title'].split('T-Shirt')[0]
             
             # extract & update some data from SKU details file
-            if item['SKU'] in self.SKU_DETAILS:
-                item.update(self.SKU_DETAILS[item['SKU']])
+            sku = item['SKU'].lower()
+            if sku in self.sku_details:
+                item.update(self.sku_details[sku])
                 
                 # this logic was specified in business requirements. if there are multiple items, the file rename rule is different but for a single item, just pick the name from sku details.
-                if self.count > 1:
+                if int(self.info['no_of_items']) > 1:
                     item['Rename'] = f'4.{self.config["moc"]}.{i+1}.'
                 else:
-                    item['Rename'] = SKU_DETAILS[item['SKU']]['PDF PNG Rename (Add Seq(1.,2.,3.etc)'] + '1'
+                    name = sku_details[sku]['PDF PNG Rename (Add Seq(1.,2.,3.etc)']
+                    # item['Rename'] = sku_details[item['SKU']]['PDF PNG Rename (Add Seq(1.,2.,3.etc)'] + '1'
+                    if name in self.png_name_counts.keys():
+                        item['Rename'] = name + str(self.png_name_counts[name])
+                        self.png_name_counts[name] += 1
+                    else:
+                        item['Rename'] = name + '1'
+                        self.png_name_counts[name] = 2
+                         
+            else:
+                items_not_found.append(item['SKU'])
+                items_not_found_index.append(i)
         
+        # remove items for which SKU is not found
+        items_not_found_index.sort(reverse=True)
+        for index in items_not_found_index:
+            del items[index]
+
         info['items'] = items
         self.items = items
         
@@ -97,16 +129,18 @@ class PageExtractor:
         Design folder is based on no of items and extracted from sku details. 
         """    
         items = self.info['items']
-        
-        if len(items) > 1:
-            self.info['Design Folder'] = '4. Multi Orders'
-            self.info['Sort Key'] = items[0]['Rename']
-        elif len(items) == 1:
-            self.info['Design Folder'] = self.SKU_DETAILS[items[0]['SKU']]['Design Folder']
-            self.info['Sort Key'] = items[0]['Rename']
+        try:
+            if int(self.info['no_of_items']) > 1 and len(items) >= 1:
+                self.info['Design Folder'] = '4. Multi Orders'
+                self.info['Sort Key'] = items[0]['Rename']
+            elif int(self.info['no_of_items']) == 1 and len(items) >= 1:
+                self.info['Design Folder'] = self.sku_details[items[0]['SKU'].lower()]['Design Folder']
+                self.info['Sort Key'] = items[0]['Rename']
+        except Exception as e:
+            raise Exception(f'Unable to assign design folder and sort key, page: {self.page_no}, file: {self.filename}')
 
     def get_info(self):
-        return self.info
+        return self.info, self.items_not_found
     
 
 class PdfExtractor:
@@ -114,7 +148,7 @@ class PdfExtractor:
     This class extracts information from the pdf. pdf will contain multiple pages but each page will have similar information. it uses PageExtractor to extract information from each page.
     """
     
-    def __init__(self, reader, labels, custom, image_folder, target_image_folder, sku_details, progress_bar):
+    def __init__(self, files, labels, ind_named_labels, custom, image_folder, target_image_folder, shared_storage, sku_details, progress_bar):
         
         """
         Initialize an instance of the PdfExtractor class.
@@ -129,38 +163,46 @@ class PdfExtractor:
             progress_bar (Progressbar): tkinter progress bar object, I know this is tightly coupled approach but business requirements aren't changing much.
         """
         
-        self.reader = reader
+        self.files = files
         self.labels = labels
+        self.ind_named_labels = ind_named_labels
         self.custom = custom
         self.image_folder = image_folder
         self.target_image_folder = target_image_folder
         self.sku_details = sku_details 
         self.progress_bar = progress_bar
-        self.writer = PyPDF2.PdfWriter()
-        self.num_pages = len(reader.pages)
+        self.shared_storage = shared_storage
+        # self.writer = PyPDF2.PdfWriter()
         self.garment_pick_list = []
         self.info = []
         self.images_not_found = []
+        self.exceptions = []
+        self.skus_not_found = []
+        self.pngs_not_found = []
+        self.labels_not_found = []
 
         self.process_files()
         self.sort_files()
 
-    def add_to_pick_list(self, page):
+    def add_to_pick_list(self, page, customer_id):
         """
         Garment pick list is just the list of items ordered. this function just extract some desired information for pick list from the item and append it. we are not checking for duplicates as this is the desired behavior.
         """
         for item in page['items']:
             self.garment_pick_list.append(
                 {
-                    'name': item['Garment Type'], 
+                    'name': item['Garment Type'],
                     'size': item['Size'], 
                     'color': item['Colour'], 
                     'quantity': int(item['Quantity']), 
                     'SKU TYPE': item['SKU'].split('-')[1],
+        'Sort Key': ".".join(item['Rename'].split('.')[:3]),
+                    'customer id': customer_id,
                 }
             )
  
-
+    def get_customer_id(self, filepath):
+        return os.path.splitext(os.path.basename(filepath))[0].split(' ')[-1]
 
     def process_files(self):
         """
@@ -170,18 +212,79 @@ class PdfExtractor:
         3. saves the information for each page in self.info 
         """
         self.progress_bar['value'] = 20
-        page_value = 70 / self.num_pages
-        for page_number in range(self.num_pages):
-            self.progress_bar['value'] += page_value
-            page = self.reader.pages[page_number]
-            text = page.extract_text()
-            post = self.labels[page_number]
-            page_info = PageExtractor(text, self.sku_details).get_info()
-            new_pdf_page = PdfPage(page_info, post, self.custom, self.image_folder, self.target_image_folder).get()
-            self.add_to_pick_list(page_info)
-            self.writer.add_page(new_pdf_page.pages[0])
-            self.info.append({'data': page_info, 'page': new_pdf_page.pages[0], 'Sort Key': page_info['Sort Key']})
-    
+        file_value = 70 / len(self.files)
+        for file in self.files:
+            reader = PyPDF2.PdfReader(file)
+            page_value = file_value / len(reader.pages)
+
+            try:
+                customer_id = self.get_customer_id(file)
+            except:
+                self.exceptions.append(f'Unable to get customer id, file: {file}')
+                continue
+            for page_number in range(len(reader.pages)):
+                self.progress_bar['value'] += page_value
+                page = reader.pages[page_number]
+                text = page.extract_text()
+
+                try:
+                    page_info, skus_not_found = PageExtractor(file, page_number, text, self.sku_details).get_info()
+                except Exception as e:
+                    self.exceptions.append(e)
+                    continue
+
+                if len(page_info['items']) < 1:
+                    self.skus_not_found.extend(skus_not_found)
+                    continue
+
+                try:
+                    post = self.get_label(page_info['name'])
+                except:
+                    self.labels_not_found.append(page_info['name'])
+                    post = Image.new('RGB', (400, 400), (255, 255, 255))
+
+                new_pdf_page, pngs_not_found = PdfPage(page_info, post, self.custom, self.image_folder, self.target_image_folder, self.shared_storage).get()
+                try:
+                    self.add_to_pick_list(page_info, customer_id)
+                except Exception as e:
+                    self.exceptions.append(f'{e} not found, page: {page_number}, file: {file}')
+                    continue
+                self.skus_not_found.extend(skus_not_found)
+                self.pngs_not_found.extend(pngs_not_found)
+                # self.writer.add_page(new_pdf_page.pages[0])
+                self.info.append({'data': page_info, 'page': new_pdf_page.pages[0], 'Sort Key': page_info['Sort Key']})
+
+    def approximate_match(self, name):
+        max_score = -1
+        best_match = None
+
+        def remove_whitespace(string):
+            return ''.join(string.split())
+
+        for key in self.labels.keys():
+            score = fuzz.partial_ratio(remove_whitespace(name), remove_whitespace(key))
+            if score > max_score:
+                max_score = score
+                best_match = key
+
+        return best_match, max_score
+
+
+
+    def get_label(self, name):
+        post = self.labels.get(name, None)
+        if post is not None:
+            return post
+        ind_name = [x.strip() for x in name.split(' ')]
+        ind_name = tuple(ind_name)
+        post = self.ind_named_labels.get(ind_name, None)
+        if post is not None:
+            return post 
+        key, score = self.approximate_match(name)
+        post = self.labels[key]
+        return post
+
+
     def sort_files(self):
         """
         Sort files using the Sort Key
@@ -207,7 +310,7 @@ class PdfExtractor:
         """
         It returns the list of images that were not found. we chose to proceed with missing images and print their names so that we can make them available
         """
-        return PdfPage.PNGS_NOT_FOUND
+        return self.pngs_not_found
     
     
 

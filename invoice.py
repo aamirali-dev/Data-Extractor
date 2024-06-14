@@ -22,7 +22,7 @@ def read_csv(filename):
     try:
         with open(filename) as file:
             data = file.readlines()
-        data = {line.strip().split(',')[0]: line.strip().split(',')[1] for line in data}
+        data = {line.strip().split(',')[0].lower(): line.strip().split(',')[1] for line in data}
         return data 
     except:
         return None
@@ -41,7 +41,10 @@ class Invoice:
         self.data_dir = data_dir
         self.df = df
         self.load_data_from_files()
-        self.initialize_order_details()
+        try:
+            self.initialize_order_details()
+        except Exception as e:
+            raise Exception(f'{e} was not found in price list or sku to name mappings')
         
     def initialize_order_details(self):
         """
@@ -50,8 +53,8 @@ class Invoice:
         fetching description & price. Finally, it selects only desired columns.
         """
         df = self.df
-        df['DESCRIPTION'] = df['SKU TYPE'].map(lambda x: self.sku_mapping[x])
-        df['UNIT PRICE'] = df['SKU TYPE'].map(lambda x: float(self.price[x]))
+        df['DESCRIPTION'] = df['SKU TYPE'].map(lambda x: self.sku_mapping[x.lower()])
+        df['UNIT PRICE'] = df['SKU TYPE'].map(lambda x: float(self.price[x.lower()]))
         df['QTY'] = df['quantity'].map(lambda x: int(x))
         df['TAXED'] = df['quantity'].map(lambda x: "")
         df['AMOUNT'] = df['QTY'] * df['UNIT PRICE']
@@ -110,7 +113,7 @@ class Invoice:
         Returns:
             Table: A table containing the order details.
         """
-        data = list(self.order_details.columns) + self.order_details.values.tolist()
+        data = [list(self.order_details.columns)] + self.order_details.values.tolist()
         # making total columns equal to 16
         data.extend([["", "", "", "", "-"]] * (16 - len(self.order_details)))
         

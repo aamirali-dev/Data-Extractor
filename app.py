@@ -8,6 +8,8 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog, messagebox
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r".\Tesseract-OCR\tesseract.exe"
 
 
 from invoice import Invoice
@@ -20,23 +22,29 @@ class SwanSeaPrintingApp:
     This is the main UI class for this application.
     """
     # this is the dict to store the relevant paths selected by the user
-    # paths = {
-    #     'SKU FILE': None,
-    #     'PACK FILE': None,
-    #     'POST FILE': None,
-    #     'IMAGE FOLDER': None,
-    #     'OUTPUT IMAGE FOLDER': None,
-    #     'OUTPUT FOLDER': None,
-    # }
+    paths = {
+        'SKU FILE': None,
+        'PACK FILE': None,
+        'POST FILE': None,
+        'IMAGE FOLDER': None,
+        'OUTPUT IMAGE FOLDER': None,
+        'OUTPUT FOLDER': None,
+        'SHARED FOLDER': None,
+    }
 
     # this is the dummy information for the testing purposes only 
     paths = {
         'SKU FILE': r"data/SKU LIST 2024.csv",
-        'PACK FILE': r"samples/29.2.24 - 24 Orders Pack 10001.pdf",
-        'POST FILE': r"samples/29.2.24 - 24 Orders Post 10001.pdf",
+        # 'PACK FILE': [r"samples/29.2.24 - 8 Orders Pack 10001.pdf", r"samples/29.2.24 - 24 Orders Pack 10001.pdf"],
+        # 'PACK FILE': [r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 23 Orders Pack 10001.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 13 Orders Pack 10001.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 1 Order Pack Claire 10002.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 1 Orders Pack 10001.pdf'],
+        # 'POST FILE': [r"samples/29.2.24 - 8 Orders Post 10001.pdf", r"samples/29.2.24 - 24 Orders Post 10001.pdf"],
+        # 'POST FILE': [r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 1 Order Post Claire 10002.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 20 Orders Post Claire 10002.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 13 Orders Post 10001.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 1 Orders Post 10001.pdf', r'C:/Users/Aamir Ali/Downloads/new orders/7.4.24 - 23 Orders Post 10001.pdf'],
+        'PACK FILE': [r'C:/Users/Aamir Ali/Downloads/3.4.24 - 13 Orders Pack Claire 10002.pdf'],
+        'POST FILE': [r'C:/Users/Aamir Ali/Downloads/3.4.24 - 13 Orders Post Claire 10002.pdf'],
         'IMAGE FOLDER': r"samples/PNG",
         'OUTPUT IMAGE FOLDER': r"samples/hbl",
         'OUTPUT FOLDER': r"samples/output",
+        'SHARED FOLDER': r"samples/shared",
     }
 
     # this contains tkinter input objects
@@ -47,11 +55,13 @@ class SwanSeaPrintingApp:
         'IMAGE FOLDER': None,
         'OUTPUT IMAGE FOLDER': None,
         'OUTPUT FOLDER': None,
+        'SHARED FOLDER': None,
     }
 
     # below lines segregates paths into files and folders for tkinter selection
-    files = ['SKU FILE', 'PACK FILE', 'POST FILE']
-    folders = ['IMAGE FOLDER', 'OUTPUT IMAGE FOLDER', 'OUTPUT FOLDER']
+    files = ['SKU FILE']
+    multi_files = ['PACK FILE', 'POST FILE']
+    folders = ['IMAGE FOLDER', 'OUTPUT IMAGE FOLDER', 'OUTPUT FOLDER', 'SHARED FOLDER']
 
     def __init__(self, root):
         """
@@ -65,7 +75,8 @@ class SwanSeaPrintingApp:
         
         # draw input widgets for files and folders
         self.draw_widgets(self.files)
-        self.draw_widgets(self.folders, j=len(self.files), entry_type='folder')
+        self.draw_widgets(self.multi_files, j=len(self.files), entry_type='multi-file')
+        self.draw_widgets(self.folders, j=len(self.files + self.multi_files), entry_type='folder')
 
         # draw button to generate results
         button = tk.Button(root, text="Generate Results", command=self.handle_click)
@@ -134,6 +145,8 @@ class SwanSeaPrintingApp:
             file_path = filedialog.askopenfilename() 
         elif entry_type == 'folder':
             file_path = filedialog.askdirectory()
+        elif entry_type == 'multi-file':
+            file_path = filedialog.askopenfilenames()
         if file_path:
             self.paths[index] = file_path
             entries[index].config(state='normal')
@@ -157,6 +170,31 @@ class SwanSeaPrintingApp:
 
         return filtered_labels
     
+    def name_labels(self, labels):
+        
+        named_labels = {}
+        ind_named_labels = {}
+        roi_coordinates = (500, 0, 800, 150)
+        evri_roi = (25, 590, 250, 800)
+        mail_roi = (25, 540, 500, 800)
+        for label in labels:
+            try:
+                roi_image = label.crop(roi_coordinates)
+                text = pytesseract.image_to_string(roi_image)
+                if text[:4] == 'EVRi':
+                    roi_image = label.crop(evri_roi)
+                elif text[:12] == 'Delivered by':
+                    roi_image = label.crop(mail_roi)
+                text = pytesseract.image_to_string(roi_image)
+                name = text.split('\n')[0].strip()
+                named_labels[name] = label
+                ind_names = [x.strip() for x in name.split(' ')]
+                ind_named_labels[tuple(ind_names)] = label
+            except:
+                pass
+        
+        return named_labels, ind_named_labels
+    
     def get_sku_details(self):
         """
         read sku details from the csv file and return the details 
@@ -168,9 +206,35 @@ class SwanSeaPrintingApp:
             for row in reader:
                 sku = row['SKU']
                 details = {key: value for key, value in row.items() if key != 'SKU'}
-                sku_details[sku] = details
+                sku_details[sku.lower()] = details
 
         return sku_details
+
+    def get_customer_ids(self, pack_files):
+        ids = set()
+        for file in pack_files:
+            customer_id = os.path.splitext(os.path.basename(file))[0].split(' ')[-1]
+            ids.add(customer_id)
+        return list(ids)
+    
+    def writelines(self, file, lines):
+        for line in lines:
+            file.write(f'{line}\n')
+
+    def print_exceptions(self, writer):
+        paths = self.paths
+        if len(writer.pngs_not_found) > 0:
+            with open(paths['OUTPUT FOLDER'] + '/images not found.txt', 'w') as f:
+                self.writelines(f, writer.pngs_not_found)
+        if len(writer.exceptions) > 0:
+            with open(paths['OUTPUT FOLDER'] + '/errors.txt', 'w') as f:
+                self.writelines(f, writer.exceptions)
+        if len(writer.skus_not_found) > 0:
+            with open(paths['OUTPUT FOLDER'] + '/skus not found.txt', 'w') as f:
+                self.writelines(f, writer.skus_not_found)
+        if len(writer.labels_not_found) > 0:
+            with open(paths['OUTPUT FOLDER'] + '/labels not found.txt', 'w') as f:
+                self.writelines(f, writer.labels_not_found)
 
     def generate_results(self):
         """
@@ -178,43 +242,58 @@ class SwanSeaPrintingApp:
         """
         paths = self.paths
         try:
-            self.progress_bar['value'] = 10
+            self.progress_bar['value'] = 5
             if not self.check_paths():
                 self.progress_bar['value'] = 100
                 return
             
             os.makedirs(paths['OUTPUT FOLDER'], exist_ok=True)
-            customer_id = os.path.splitext(os.path.basename(paths['PACK FILE']))[0].split(' ')[-1]
-
-            with open(paths['PACK FILE'], 'rb') as file:
-                reader = PyPDF2.PdfReader(file)
-                labels = convert_from_path(paths['POST FILE'], poppler_path='poppler/bin')
-                labels = self.filter_labels(labels, paths['POST FILE'])
-                custom = Image.open('data/customs_label.png')
-                sku_details = self.get_sku_details()
-                writer = PdfExtractor(reader, labels, custom, paths['IMAGE FOLDER'], 
-                                         paths['OUTPUT IMAGE FOLDER'], sku_details, self.progress_bar)
+            labels = []
+            for filepath in paths['POST FILE']:
+                try:
+                    llabels = convert_from_path(filepath, poppler_path='poppler/bin')
+                    llabels = self.filter_labels(llabels, filepath)
+                    labels.extend(llabels)
+                except Exception as e:
+                    continue
+            self.progress_bar['value'] = 15
+            named_labels, ind_named_labels = self.name_labels(labels)
+            custom = Image.open('data/customs_label.png')
+            sku_details = self.get_sku_details()
+            writer = PdfExtractor(paths['PACK FILE'], named_labels, ind_named_labels, custom, paths['IMAGE FOLDER'],
+                                            paths['OUTPUT IMAGE FOLDER'], paths['SHARED FOLDER'], sku_details, self.progress_bar)
                             
             with open(paths['OUTPUT FOLDER'] + '/output.pdf', 'wb') as f:
                 writer.write(f)
-            
+            self.print_exceptions(writer)
             df = pd.DataFrame(writer.garment_pick_list)
             # grouped_df = df.groupby(['name', 'size', 'color'])['quantity'].sum().reset_index().sort_values(by=['name', 'size', 'color'])
-            grouped_df = df.groupby(['name', 'size', 'color']).agg({'quantity': 'sum', 'Sort Key': 'first'}).reset_index()
-            grouped_df = grouped_df.sort_values(by=['Sort Key']).drop(columns=['Sort Key'])
+            # grouped_df = df.groupby(['name', 'size', 'color']).agg({'quantity': 'sum', 'Sort Key': 'first'}).reset_index()
+            grouped_df = df.groupby(['Sort Key']).agg({'quantity': 'sum', 'name': 'first', 'size': 'first', 'color': 'first'}).reset_index()
+            grouped_df = grouped_df.sort_values(by=['Sort Key']).reset_index().drop(columns=['index'])
+            # grouped_df = grouped_df.sort_values(by=['Sort Key']).drop(columns=['Sort Key'])
             PickList(grouped_df).to_pdf(paths['OUTPUT FOLDER'] + '/pick_list.pdf')
-            
-            grouped_df = df.groupby(['SKU TYPE'])['quantity'].sum().reset_index()
-            Invoice(grouped_df, customer_id).to_pdf(paths['OUTPUT FOLDER'] + '/invoice.pdf')
+            for cid, group_df in df.groupby(['customer id']):
+                customer_id = cid[0]
+                new_df = pd.DataFrame(group_df)
+                grouped_df = new_df.groupby(['SKU TYPE'])['quantity'].sum().reset_index()
+                try:
+                    Invoice(grouped_df, customer_id).to_pdf(paths['OUTPUT FOLDER'] + f'/invoice_{customer_id}.pdf')
+                except Exception as e:
+                    messagebox.showerror("Error", e)
             
             self.progress_bar['value'] = 100
             messagebox.showinfo("Operation Completed", f"Output Files has been generated successfully")
         
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            # import traceback
+            # traceback.print_exc()
             messagebox.showerror("Unknow Error", f"Some Unknow Error Occured. Find Details Below \n{e}")
             self.progress_bar['value'] = 100
+        
+    def get_shared_storage(self):
+        return self.paths['SHARED FOLDER']
+        
         
 
 
